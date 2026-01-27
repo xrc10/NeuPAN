@@ -1,0 +1,3 @@
+[submodule "ir-sim"]
+	path = ir-sim
+	url = git@github.com:hanruihua/ir-sim.git
