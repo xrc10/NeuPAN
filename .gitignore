@@ -164,3 +164,16 @@ test.py
 
 .vscode/
 test.py
+
+# Generated / rendered outputs (animations, videos, navigation & render results)
+*.gif
+*.mp4
+example/animation/
+example/navigation_data/
+example/navigation_data_final/
+example/render_data/
+example/verify_animation.gif
+example/verify_trajectory.png
+example/**/frame_*_new.jpg
+example/**/wall_test_*.jpg
+example/**/scene_map.jpg
