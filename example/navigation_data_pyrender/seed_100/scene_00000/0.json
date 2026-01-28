@@ -1,0 +1,12 @@
+{
+  "finish": true,
+  "status": "Normal",
+  "success": 1.0,
+  "collision_count": 0,
+  "total_step": 243,
+  "duration": 24.3,
+  "instruction": "Navigate in a 61.1m room with 11 obstacles using NeuPAN controller.",
+  "controller_type": "neupan",
+  "room_size": 61.136014446951464,
+  "num_obstacles": 11
+}

@@ -1,6 +1,13 @@
 """
 将2D模拟数据渲染为3D第一人称视频
 并生成符合DATA_FORMAT.md的navigation任务格式数据
+
+注意：这是手写的渲染器版本（无额外依赖）
+如果您想要更高质量的渲染效果，请使用基于 PyRender 的版本：
+    - 文件: render2Dto3D_pyrender.py
+    - 文档: PYRENDER_README.md
+    - 优势: 代码更简洁（减少30%代码量），渲染质量更高，自动光照和阴影
+    - 缺点: 需要安装额外依赖（pyrender, trimesh）
 """
 
 import json
