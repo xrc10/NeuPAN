@@ -66,11 +66,14 @@ def main(
     
     # 记录初始障碍物信息
     for idx, obs_info in enumerate(obstacle_info_list):
+        velocity = obs_info.velocity.flatten().tolist() if obs_info.velocity is not None else [0.0, 0.0]
+        
         obstacle_data = {
             "id": idx,
             "initial_center": obs_info.center.flatten().tolist(),
             "radius": float(obs_info.radius),
-            "velocity": obs_info.velocity.flatten().tolist() if obs_info.velocity is not None else [0.0, 0.0],
+            "velocity": velocity,
+            # is_dynamic 会在所有数据收集完成后标记
         }
         if obs_info.vertex is not None and len(obs_info.vertex) > 0:
             obstacle_data["vertices"] = obs_info.vertex.tolist()
@@ -186,6 +189,43 @@ def main(
         
         step += 1
     
+    # 根据轨迹数据标记动态障碍物
+    print("\n标记动态障碍物...")
+    for obs_idx, obs_data in enumerate(episode_data["initial_obstacles"]):
+        is_dynamic = False
+        
+        # 检查轨迹中是否有速度变化或位置变化
+        if obs_idx in episode_data["obstacle_trajectories"]:
+            traj = episode_data["obstacle_trajectories"][obs_idx]
+            
+            if len(traj) > 1:
+                # 方法1: 检查是否有非零速度
+                has_velocity = False
+                for step_pos in traj:
+                    vel = step_pos.get('velocity', [0.0, 0.0])
+                    if abs(vel[0]) > 1e-6 or abs(vel[1]) > 1e-6:
+                        has_velocity = True
+                        break
+                
+                # 方法2: 检查位置是否有显著变化
+                start_pos = traj[0]
+                end_pos = traj[-1]
+                distance_moved = np.sqrt(
+                    (end_pos['x'] - start_pos['x'])**2 + 
+                    (end_pos['y'] - start_pos['y'])**2
+                )
+                
+                is_dynamic = has_velocity or distance_moved > 0.1
+                
+                if is_dynamic:
+                    print(f"  障碍物 {obs_idx}: 动态（移动距离 {distance_moved:.2f}m）")
+        
+        obs_data["is_dynamic"] = is_dynamic
+    
+    # 统计动态障碍物数量
+    num_dynamic = sum(1 for obs in episode_data["initial_obstacles"] if obs.get("is_dynamic", False))
+    print(f"共检测到 {num_dynamic} 个动态障碍物（总共 {len(episode_data['initial_obstacles'])} 个）")
+    
     # 记录任务元数据
     episode_data["metadata"] = {
         "finish": success or step >= max_steps,
@@ -196,6 +236,7 @@ def main(
         "duration": float(step * 0.1),  # 假设每步0.1秒
         "env_file": env_file,
         "planner_file": planner_file,
+        "num_dynamic_obstacles": num_dynamic,
     }
     
     # 保存数据

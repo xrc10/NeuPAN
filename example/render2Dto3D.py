@@ -321,13 +321,16 @@ class Renderer2Dto3D:
                 continue
             
             obs_info = initial_obstacles[obs_id_int]
+            is_dynamic = obs_info.get('is_dynamic', False)
             
             # 获取当前位置
-            if step_idx < len(traj):
+            if is_dynamic and step_idx < len(traj):
+                # 动态障碍物：使用轨迹中的当前位置
                 obs_pos = traj[step_idx]
                 obs_x = obs_pos["x"]
                 obs_y = obs_pos["y"]
             else:
+                # 静态障碍物或没有轨迹数据：使用初始位置
                 center = obs_info["initial_center"]
                 obs_x, obs_y = center[0], center[1]
             
@@ -338,6 +341,14 @@ class Renderer2Dto3D:
                 # 多边形障碍物（确保有至少3个顶点）
                 vertices_x = np.array(vertices[0])
                 vertices_y = np.array(vertices[1])
+                
+                # 如果是动态障碍物，需要平移顶点
+                if is_dynamic:
+                    initial_center = obs_info["initial_center"]
+                    dx = obs_x - initial_center[0]
+                    dy = obs_y - initial_center[1]
+                    vertices_x = vertices_x + dx
+                    vertices_y = vertices_y + dy
                 
                 # 将所有顶点转换到相机坐标系
                 all_vertices_camera = []
@@ -399,7 +410,8 @@ class Renderer2Dto3D:
                         "type": "polygon",
                         "edges": visible_edges,
                         "obs_info": obs_info,
-                        "distance": min_distance
+                        "distance": min_distance,
+                        "is_dynamic": is_dynamic
                     })
             else:
                 # 圆形障碍物或退化的多边形
@@ -426,7 +438,8 @@ class Renderer2Dto3D:
                         "local_y": local_y,
                         "distance": distance,
                         "radius": radius,
-                        "obs_info": obs_info
+                        "obs_info": obs_info,
+                        "is_dynamic": is_dynamic
                     })
         
         # 按距离排序（远的先绘制）
@@ -434,10 +447,11 @@ class Renderer2Dto3D:
         
         # 渲染障碍物
         for obs in obstacles_to_render:
+            is_dynamic = obs.get("is_dynamic", False)
             if obs["type"] == "polygon":
-                self._draw_polygon_obstacle(frame, obs["edges"], obs["obs_info"], horizon_y)
+                self._draw_polygon_obstacle(frame, obs["edges"], obs["obs_info"], horizon_y, is_dynamic)
             else:
-                self._draw_circle_obstacle(frame, obs, horizon_y)
+                self._draw_circle_obstacle(frame, obs, horizon_y, is_dynamic)
         
         # 添加UI信息
         self._draw_ui_info(frame, step_idx)
@@ -494,20 +508,28 @@ class Renderer2Dto3D:
                 points = np.array(points, dtype=np.int32)
                 cv2.polylines(frame, [points], False, grid_color, 1)
     
-    def _draw_polygon_obstacle(self, frame, edges, obs_info, horizon_y):
+    def _draw_polygon_obstacle(self, frame, edges, obs_info, horizon_y, is_dynamic=False):
         """绘制多边形障碍物（改进版 - 基于边）"""
         if not edges or len(edges) == 0:
             return
         
-        # 根据障碍物大小判断是墙壁还是小障碍物
+        # 根据障碍物大小和类型判断是墙壁还是小障碍物
         radius = obs_info.get("radius", 0.5)
         if radius > 10:  # 大障碍物，可能是墙壁
-            obstacle_color = (210, 210, 210)  # 浅灰色（墙壁）BGR
-            edge_color = (80, 80, 80)
+            if is_dynamic:
+                obstacle_color = (100, 150, 255)  # 浅蓝色（动态墙壁）BGR
+                edge_color = (50, 100, 200)
+            else:
+                obstacle_color = (210, 210, 210)  # 浅灰色（静态墙壁）BGR
+                edge_color = (80, 80, 80)
             wall_height = self.wall_height
         else:  # 小障碍物
-            obstacle_color = (80, 100, 220)  # 橙红色（小障碍物）BGR
-            edge_color = (40, 50, 120)
+            if is_dynamic:
+                obstacle_color = (0, 165, 255)  # 橙色（动态小障碍物）BGR
+                edge_color = (0, 100, 200)
+            else:
+                obstacle_color = (80, 100, 220)  # 橙红色（静态小障碍物）BGR
+                edge_color = (40, 50, 120)
             wall_height = self.obstacle_height
         
         # 绘制每条边作为一个矩形面
@@ -560,12 +582,13 @@ class Renderer2Dto3D:
             cv2.fillPoly(frame, [wall_face], face_color)
             cv2.polylines(frame, [wall_face], True, edge_color, 1)
     
-    def _draw_circle_obstacle(self, frame, obs, horizon_y):
+    def _draw_circle_obstacle(self, frame, obs, horizon_y, is_dynamic=False):
         """绘制圆形障碍物（改进版）"""
         local_x = obs["local_x"]
         local_y = obs["local_y"]
         radius = obs["radius"]
         distance = obs["distance"]
+        obs_info = obs.get("obs_info", {})
         
         # 投影中心点
         screen_x = self._project_to_screen_x(local_y, local_x)
@@ -579,17 +602,20 @@ class Renderer2Dto3D:
         if screen_radius < 2:
             return
         
-        # 根据障碍物大小选择颜色
-        radius = obs.get("radius", obs_info.get("radius", 0.5))
-        
         # 根据距离调整颜色（近亮远暗）
         brightness = max(0.5, min(1.0, 1.0 - distance / 50.0))
         
-        # 根据障碍物大小选择基础颜色
+        # 根据障碍物大小和类型选择基础颜色
         if radius > 10:  # 大障碍物 - 墙壁
-            base_color = (210, 210, 210)  # 灰色 BGR
+            if is_dynamic:
+                base_color = (100, 150, 255)  # 浅蓝色（动态墙壁）BGR
+            else:
+                base_color = (210, 210, 210)  # 灰色（静态墙壁）BGR
         else:  # 小障碍物
-            base_color = (80, 100, 220)  # 橙红色 BGR
+            if is_dynamic:
+                base_color = (0, 165, 255)  # 橙色（动态小障碍物）BGR
+            else:
+                base_color = (80, 100, 220)  # 橙红色（静态小障碍物）BGR
         
         # 绘制圆柱体
         obstacle_color = tuple(int(c * brightness) for c in base_color)
